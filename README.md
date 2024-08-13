@@ -3,6 +3,7 @@
 Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoint removes assigned GPU adapters, creates checkpoint then reassigns GPU adapters. So, you can create checkpoints and continue to use your GPU(s) in your VMs.
 
 
+
 ## With HyperPoint, You Can
 1) Create checkpoints for GPU-assigned VMs.
 2) Add GPU adapter(s) by name, device ID, instance ID, device order or automatically.
@@ -11,11 +12,13 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 5) List assigned GPU adapter(s) and view GPU details: name, device ID, instance ID, device order.
 
 
+
 ## Cautions
 1) **Do not try** to remove/add GPUs, create checkpoints while your target VM is running. This will definitely break snapshots, VM and your hearth. (Script already won't be executed while target VM is running, but keep this in mind.)
 2) **Do not change** vmdisk contents from outside, like attaching VHDX file to host (e.g., if you want to update GPU drivers in the VM). It will also break checkpoints. It is recommended to change vmdisk contents inside the guest os via network-shared folders, etc.
 3) Automatic checkpoints option won't work for GPU-assigned VM and will give error. Script also disables it.
 4) HyperPoint has not been tested in all possible scenarios and environments. Make sure to backup your VM before using the script. **Use it at your own risk**.
+
 
 
 ## Parameters
@@ -30,13 +33,13 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 |       | "add-all"                     | Add all GPUs in the PGPU list.                                 |
 |       | "remove"                      | Remove assigned user-defined PGPU with '-GPU' param.           |
 |       | "remove-all"                  | Remove all assigned PGPUs.                                     |
-|       | "reset"                       | It equals "remove-all" + "add-auto" params.                    |
-| -GPU  | "gpu friendly device name"    | Define PGPU by friendly name(2)(3).                            |
-|       | "deviceid:PCI\VEN..."         | Define PGPU by device ID(3).                                   |
-|       | "instanceid:\\\\?\PCI#VEN..." | Define PGPU by instance ID(3).                                 |
-|       | "order:[int]"                 | Define PGPU by partitionable GPU list order number(3).         |
-|       | "adapterid:Microsoft:F65D..." | Define PGPU by adapter ID(4) (*For removal only*)              |
-|       | "value1","value2","value3"... | Multiple PGPUs can be defined with comma-separated strings(5). |
+|       | "reset"                       | Equivalent to "remove-all" + "add-auto" params.                |
+| -GPU  | "gpu friendly device name"    | Specify the  PGPU by friendly name(2)(3).                      |
+|       | "deviceid:PCI\VEN..."         | Specify PGPU by device ID(3).                                  |
+|       | "instanceid:\\\\?\PCI#VEN..." | Specify PGPU by instance ID(3).                                |
+|       | "order:[int]"                 | Specify PGPU by partitionable GPU list order number(3).        |
+|       | "adapterid:Microsoft:F65D..." | Specify PGPU by adapter ID(4) (*For removal only*)             |
+|       | "value1","value2","value3"... | Multiple PGPUs can be defined with comma-separated values(5).  |
 
 > **(1):** If -GPU parameter is not defined; most suitable GPU will be selected automatically.
 
@@ -46,7 +49,8 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 
 > **(4):** Adapter ID is necessary for only if you want to remove PGPU via adapter id.
 
-> **(5):** Definitions can be mixed like `-GPU "Nvidia Geforce RTX 4060","order:3","deviceid:PCI\VEN..."`
+> **(5):** Definitions can be mixed e.g., `-GPU "Nvidia Geforce RTX 4060","order:3","deviceid:PCI\VEN..."`
+
 
 
 ## Usage Examples
@@ -54,7 +58,7 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 ### Checkpoint
 
 - `PS> \Path\To\hyperpoint.ps1 -VM "my vm"`
-Removes assigned GPUs, creates checkpoint and reassigns GPUs. 
+Removes assigned GPUs, **creates checkpoint** and reassigns GPUs.
 *Notice: The GPU's Instance ID is required when reassigning it to a VM. If you have assigned a GPU using the `Add-VMGpuPartitionAdapter` command without specifying the instance ID, it won't have an instance ID and cannot be reassigned automatically. Simply use HyperPoint to add GPU adapters. HyperPoint guarantees instance ID for every assigned GPU.*
 
 - `PS> \Path\To\hyperpoint.ps1 -VM "my vm" -GPU "Nvidia GeForce RTX 4060"`
