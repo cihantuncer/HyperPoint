@@ -38,10 +38,14 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 |       | "adapterid:Microsoft:F65D..." | Define PGPU by adapter ID^4^ (*For removal only*)              |
 |       | "value1","value2","value3"... | Multiple PGPUs can be defined with comma-separated strings^5^. |
 
-> **(1):** If -GPU parameter is not defined; most suitable GPU will be selected automatically. 
+> **(1):** If -GPU parameter is not defined; most suitable GPU will be selected automatically.
+
 > **(2):** If there are multiple GPUs with the same name in the PGPU list, all of them will be grabbed.
+
 > **(3):** These values can be obtained using the `-DO "list-gpus-partitionable"` parameter.
+
 > **(4):** Adapter ID is necessary for only if you want to remove PGPU via adapter id.
+
 > **(5):** Definitions can be mixed like `-GPU "Nvidia Geforce RTX 4060","order:3","deviceid:PCI\VEN..."`
 
 
