@@ -26,17 +26,17 @@ Hyper-V does not allow checkpoints on a GPU-assigned virtual machines. HyperPoin
 |       | "list-gpus-partitionable"     | List available PGPUs.                                          |
 |       | "list-gpus-assigned"          | List assigned PGPUs.                                           |
 |       | "add"                         | Add user-defined PGPU with '-GPU' param.                       |
-|       | "add-auto"                    | Add PGPU automatically^1^ or user-defined with '-GPU' param.   |
+|       | "add-auto"                    | Add PGPU automatically(1) or user-defined with '-GPU' param.   |
 |       | "add-all"                     | Add all GPUs in the PGPU list.                                 |
 |       | "remove"                      | Remove assigned user-defined PGPU with '-GPU' param.           |
 |       | "remove-all"                  | Remove all assigned PGPUs.                                     |
 |       | "reset"                       | It equals "remove-all" + "add-auto" params.                    |
-| -GPU  | "gpu friendly device name"    | Define PGPU by friendly name^2 3^.                             |
-|       | "deviceid:PCI\VEN..."         | Define PGPU by device ID^3^.                                   |
-|       | "instanceid:\\\\?\PCI#VEN..." | Define PGPU by instance ID^3^.                                 |
-|       | "order:[int]"                 | Define PGPU by partitionable GPU list order number^3^.         |
-|       | "adapterid:Microsoft:F65D..." | Define PGPU by adapter ID^4^ (*For removal only*)              |
-|       | "value1","value2","value3"... | Multiple PGPUs can be defined with comma-separated strings^5^. |
+| -GPU  | "gpu friendly device name"    | Define PGPU by friendly name(2)(3).                            |
+|       | "deviceid:PCI\VEN..."         | Define PGPU by device ID(3).                                   |
+|       | "instanceid:\\\\?\PCI#VEN..." | Define PGPU by instance ID(3).                                 |
+|       | "order:[int]"                 | Define PGPU by partitionable GPU list order number(3).         |
+|       | "adapterid:Microsoft:F65D..." | Define PGPU by adapter ID(4) (*For removal only*)              |
+|       | "value1","value2","value3"... | Multiple PGPUs can be defined with comma-separated strings(5). |
 
 > **(1):** If -GPU parameter is not defined; most suitable GPU will be selected automatically.
 
