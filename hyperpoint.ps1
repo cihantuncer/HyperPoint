@@ -574,16 +574,16 @@ Function process_Main{
 
 	switch ($do)
 	{
-		"list-gpus" 		      {process_ListGpus; Break}
+		"list-gpus"               {process_ListGpus; Break}
 		"list-gpus-partitionable" {process_ListGpusPartitionable; Break}
 		"list-gpus-assigned"      {process_ListGpusAssigned; Break}
-		"add"      				  {process_Add; Break}
-		"add-auto"      		  {process_AddAuto; Break}
-		"add-all"      		      {process_AddAll; Break}
-		"remove"      			  {process_Remove; Break}
-		"remove-all"      		  {process_RemoveAll; Break}
-		"reset"      			  {process_Reset; Break}
-		Default {process_Checkpoint}
+		"add"                     {process_Add; Break}
+		"add-auto"                {process_AddAuto; Break}
+		"add-all"                 {process_AddAll; Break}
+		"remove"                  {process_Remove; Break}
+		"remove-all"              {process_RemoveAll; Break}
+		"reset"                   {process_Reset; Break}
+		Default                   {process_Checkpoint}
 	}
 }
 
