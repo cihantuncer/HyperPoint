@@ -1,20 +1,29 @@
-﻿# Gpu-Assigned Checkpoints for Hyper-V 
-# Cihan Tuncer cihan[at]cihantuncer.com 
+# Hyperpoint v1.4.0
+# Gpu-Assigned Checkpoints for Hyper-V
+# https://github.com/cihantuncer/HyperPoint
+# (c) 2024, Cihan Tuncer - cihan@cihantuncer.com
+# This code is licensed under MIT license (see LICENSE.md for details)
 
 param(
-	$do=$null,
-    $vm=$null,
-    [string[]] $gpu=@(),
-	[switch]$s
+	[string]$vm,         # Virtual machine name
+	[string]$do,         # Option name
+    [string[]] $gpu=@(), # GPU query array
+	[string]$dest,       # Driver installation destination path
+	[switch]$zip,        # Driver installation compress option
+	[switch]$s           # Silent mode
 )
 
-$script:vmName     = $vm								   # User-defined Virtual Machine Name
-$script:vmObj      = $null								   # Virtual Machine Object
-$script:gpusInput  = $gpu 								   # User-defined Gpu Array
-$script:pGpuList   = [System.Collections.ArrayList]::new() # Partitionable Gpu List
-$script:udGpuList  = [System.Collections.ArrayList]::new() # Fetched User-defined Gpu List
+$packPath    = $null                                 # Driver packages path		     
+$vmName      = $vm                                   # User-defined virtual machine name
+$vmObj       = $null                                 # Virtual machine object
+$gpusInput   = $gpu                                  # User-defined GPU array
+$pGpuList    = [System.Collections.ArrayList]::new() # Partitionable GPU list
+$udGpuList   = [System.Collections.ArrayList]::new() # Fetched user-defined GPU list
+$driverList  = [System.Collections.ArrayList]::new() # Fetched driver list
 
-$script:log = [PSCustomObject]@{
+# Log database
+$log = [PSCustomObject]@{
+
 	error   = [System.Collections.ArrayList]::new()
 	warning = [System.Collections.ArrayList]::new()
 	notice  = [System.Collections.ArrayList]::new()
@@ -22,6 +31,27 @@ $script:log = [PSCustomObject]@{
 	success = [System.Collections.ArrayList]::new()
 }
 
+# Adapter configs
+$adapterConfig=[PSCustomObject]@{
+
+	MinPartitionVRAM        = 80000000
+	MaxPartitionVRAM        = 100000000
+	OptimalPartitionVRAM    = 100000000
+	MinPartitionEncode      = 80000000
+	MaxPartitionEncode      = 100000000
+	OptimalPartitionEncode  = 100000000
+	MinPartitionDecode      = 80000000
+	MaxPartitionDecode      = 100000000
+	OptimalPartitionDecode  = 100000000
+	MinPartitionCompute     = 80000000
+	MaxPartitionCompute     = 100000000
+	OptimalPartitionCompute = 100000000
+}
+
+# --- Utils ---
+
+# Forces to run as admin.
+# @TODO: Doesn't work properly in all scenarios.
 Function runAsAdministrator(){
 
 	$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -33,58 +63,108 @@ Function runAsAdministrator(){
 
 }
 
-Function vmCheck{
+# Checks if administrative privileges are granted. If not, exits the script.
+Function checkAdministrator(){
 
-	if( $null -eq $vmName ){
-		"`n[ERROR] No VM Name entered as parameter. Use -VM `"my vm name`" to set target vm.`n "
-		Exit
-	}
+	$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 
-	$_vmObj = GET-VM -VMName $vmName  -ErrorAction SilentlyContinue
+	if(-Not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 
-	if( $_vmObj ){
-		$script:vmObj=$_vmObj
-	}
-	else{
-		"`n[ERROR] No VM found. Check your VM name.`n "
-		Exit
+		log "This script must be executed as Administrator."
+		""
+
+		exit
 	}
 
 }
 
-Function vmStatusCheck{
+# Modifies messages for output and log file.
+Function msg{
 
-	$vmStatus = (Get-VM -Name $vmName).State
+	param($msg=$null,$fg=(get-host).ui.rawui.ForegroundColor,$bg=(get-host).ui.rawui.BackgroundColor)
 
-	if( $vmStatus -eq "running"){
-	
-		"`n[ERROR] Cannot execute while `"$vmName`" is running. Please shutdown VM first!`n"
-		Exit
+	if($msg){
+
+		if(-Not $s){
+
+			write-host $msg -ForegroundColor $fg -BackgroundColor $bg
+		}
+
+		$ts=$(Get-Date -Format "dd/MM/yy HH:mm:ss")
+
+		return "$ts`: $msg"
 	}
+
+
 }
 
+# Adds messages to log object.
 Function log{
 
 	param($msg="",$type="info")
 
 	if($msg){
 
-		$log.($type).Add($msg) | Out-Null
-
-		if(-Not $s){
-			write-host "[$($type.ToUpper())] $msg"
+		switch ($type)
+		{
+			"error" {
+				$msg = msg "[ERROR] $msg" "red"
+				$log.error.Add($msg) | Out-Null
+				; Break
+			}
+			"warning" {
+				$msg = msg "[WARNING] $msg" "yellow"
+				$log.warning.Add($msg) | Out-Null
+				; Break
+			}
+			"notice" {
+				$msg = msg "[NOTICE] $msg" "blue"
+				$log.notice.Add($msg) | Out-Null
+				; Break
+			}
+			"success" {
+				$msg = msg "[SUCCESS] $msg" "green"
+				$log.success.Add($msg) | Out-Null
+				; Break
+			}
+			"info" {
+				$msg = msg "[INFO] $msg"
+				$log.info.Add($msg) | Out-Null
+			}
 		}
 		
 	}	
 	
 }
 
-Function disableAutoCheckpoints{
+# Creates log file in the "script path\log" folder.
+Function writeLog{
 
-	Set-VM -VMName $vmName -AutomaticCheckpointsEnabled $False
-	"`n[NOTICE] Automatic checkpoints disabled for `"$vmName`".`n"
+	$ts      = $(Get-Date -Format "dd-MM-yy_HH-mm-ss")
+	$logDir  = "$PSScriptRoot\logs"
+	$logFile = "$logDir\log_$ts.txt"
+	$logStr  = ""
+
+	if(-Not (Test-Path -Path $logDir) ){
+		New-Item -ItemType Directory $logDir | Out-Null
+	}
+
+	New-Item $logFile | Out-Null
+	
+	foreach ($cat in $log.PSObject.Properties)
+	{
+		foreach($msg in $cat.Value){
+
+			$logStr +="$msg`n"
+		}
+
+	}
+
+	$logStr | Out-File -FilePath $logFile
+
 }
 
+# Converts instance ID to device ID.
 Function convertInstanceIdtoDeviceId{
 	param(
 		$instanceId=$null
@@ -102,6 +182,7 @@ Function convertInstanceIdtoDeviceId{
 	return $deviceId
 }
 
+# Finds the PnP device based on the given device ID.
 Function findPnpDevice{
 
 	param(
@@ -117,11 +198,16 @@ Function findPnpDevice{
 	return $pnpDev
 }
 
+
 # --- Listing ---
 
+# Writes details based on the given GPU object to the output or variable. 
 Function showGpu{
 
-	param($gpu,$writehost=$true)
+	param(
+		$gpu,
+		$writehost=$true
+	)
 
 	$gpuStr=""
 
@@ -138,6 +224,7 @@ Function showGpu{
 	}
 }
 
+# Writes details based on the given GPU object list to the output or variable. 
 Function listGpus{
 
 	param($gpuList,$label="",$writehost=$true)
@@ -170,40 +257,84 @@ Function listGpus{
 
 # --- Detecting ---
 
-Function getPartitionableGpus{
+# Checks if the script is running on the host machine.
+Function isVmCheck{
 
-	$pGpuObjs = Get-WmiObject -Class "Msvm_PartitionableGpu" -ComputerName $env:COMPUTERNAME -Namespace "ROOT\virtualization\v2"
+	$hypervCheck = Get-Service -Name vmicheartbeat -ErrorAction SilentlyContinue
 
-	foreach($pGpuObj in $pGpuObjs){
+	if ($hypervCheck.Status -eq "Running") {
 
-		$deviceId  = convertInstanceIdtoDeviceId $pGpuObj.Name
-		$gpuPnpDevice = findPnpDevice $deviceId
-
-		if($gpuPnpDevice){
-
-			$thisGpu = [PSCustomObject]@{
-				friendlyName = $gpuPnpDevice.FriendlyName
-				deviceID     = $gpuPnpDevice.deviceID
-				instanceID   = $pGpuObj.Name
-				assignable   = $true
-			}
-		}
-		else{
-
-			$thisGpu = [PSCustomObject]@{
-				friendlyName = "Unknown GPU"
-				deviceID     = ""
-				instanceID   = $pGpuObj.Name
-				assignable   = $false
-			}
-
-		}
-
-		$pGpuList.Add($thisGpu) | out-null
+		log "This script must be run on the host machine." "error"
+		""
+		exit
 
 	}
 }
 
+# Checks if the script is running on the host machine.
+
+Function vmCheck{
+
+	if( $null -eq $vmName ){
+		log "No VM Name entered as parameter. Use -VM `"my vm name`" parameter to set target VM." "error"
+		writeLog
+		""
+		Exit
+	}
+
+	$_vmObj = GET-VM -VMName $vmName  -ErrorAction SilentlyContinue
+
+	if( $_vmObj ){
+		$script:vmObj=$_vmObj
+	}
+	else{
+		log "No VM found. Check your VM name." "error"
+		""
+		Exit
+	}
+
+}
+
+# Checks if the VM exists and returns true/false.
+Function vmGet{
+
+	if( $null -eq $vmName ){
+		return $false
+	}
+
+	$_vmObj = GET-VM -VMName $vmName  -ErrorAction SilentlyContinue
+
+	if( $_vmObj ){
+		$script:vmObj=$_vmObj
+		return $true
+	}
+	else{
+		return $false
+	}
+
+}
+
+# Checks VM status.
+Function vmStatusCheck{
+
+	$vmStatus = (Get-VM -Name $vmName).State
+
+	if( $vmStatus -eq "running"){
+	
+		log "Cannot execute while `"$vmName`" is running. Please shutdown VM first!" "error"
+		""
+		Exit
+	}
+}
+
+# Disables automatic checkpoints for the VM.
+Function disableAutoCheckpoints{
+
+	Set-VM -VMName $vmName -AutomaticCheckpointsEnabled $False
+	log "Automatic checkpoints disabled for `"$vmName`"." "notice"
+}
+
+# Gets GPU(s) from partitionable GPUs list based on the given GPU query array. 
 Function getGpuByInput{
 
 	$i=0
@@ -219,6 +350,9 @@ Function getGpuByInput{
 				if( $deviceID -eq $($pGpu.deviceID) ){
 					$udGpuList.Add($pGpu) | out-null
 				}
+				else{
+					log "No GPU found with given device ID: $gpuInput" "warning"
+				}
 			}
 			elseif($gpuInput -match "instanceid:"){
 	
@@ -227,6 +361,9 @@ Function getGpuByInput{
 				if( $instanceID -eq $($pGpu.instanceID) ){
 
 					$udGpuList.Add($pGpu) | out-null
+				}
+				else{
+					log "No GPU found with given instance ID: $gpuInput" "warning"
 				}
 			}
 			elseif($gpuInput -match "order:"){
@@ -237,6 +374,9 @@ Function getGpuByInput{
 				
 					$udGpuList.Add($pGpu) | out-null
 				}
+				else{
+					log "No GPU found with given order: $gpuInput" "warning"
+				}
 			}
 			else{
 
@@ -245,12 +385,16 @@ Function getGpuByInput{
 				if( $pGpu.friendlyName -eq $gpuFName ){
 					$udGpuList.Add($pGpu) | out-null
 				}
+				else{
+					log "No GPU found with given name: $gpuInput" "warning"
+				}
 			}
 		}
 		$i++
 	}
 }
 
+# Gets the list of GPUs assigned to the VM.
 Function getAssignedGpus{
 
 	$gpuList = [System.Collections.ArrayList]::new() 
@@ -288,8 +432,86 @@ Function getAssignedGpus{
 
 }
 
-# --- Assigment ---
+# --- Assignment ---
 
+# Changes the adapter config values based on the given config file. 
+Function setAdapterVals{
+
+	param(
+		[string]$configFile
+	)
+
+	Get-Content $configFile | Foreach-Object {
+
+		$varLine = $_.Split('=')
+
+		if( $varLine[0] -AND $varLine[1] ){
+
+			$var = $varLine[0].Trim()
+
+			if( [bool]($adapterConfig.PSobject.Properties.name -match $var) ){
+				 $adapterConfig.$var=[int]$varLine[1].Trim()
+			}
+		}
+	}
+}
+
+# Changes the default or specified adapter config values based on the config file in the script directory.
+Function setAdapterConfig{
+
+	param(
+		[string]$gpu # gpu friendly name
+	)
+
+	$defConf  = "$PSScriptRoot\adapter.config"
+	$gpuConf1 = "$PSScriptRoot\$gpu.config"
+	$gpuConf2 = "$PSScriptRoot\$($gpu -replace '\s','-').config"
+	$gpuConf3 = "$PSScriptRoot\$($gpu -replace '\s','_').config"
+	$gpuConf4 = "$PSScriptRoot\$($gpu -replace '\s','').config"
+
+	    if( Test-Path -Path $gpuConf1 ){ setAdapterVals $gpuConf1; log "Adapter configuration applied from $gpuConf1"; return }
+	elseif( Test-Path -Path $gpuConf2 ){ setAdapterVals $gpuConf2; log "Adapter configuration applied from $gpuConf2"; return }
+	elseif( Test-Path -Path $gpuConf3 ){ setAdapterVals $gpuConf3; log "Adapter configuration applied from $gpuConf3"; return }
+	elseif( Test-Path -Path $gpuConf4 ){ setAdapterVals $gpuConf4; log "Adapter configuration applied from $gpuConf4"; return }
+	elseif( Test-Path -Path $defConf  ){ setAdapterVals $defConf ; log "Default adapter configuration applied from $defConf"  }
+}
+
+# Adds all partitionable GPUs on the host machine to the "Partitionable GPUs List".
+Function getPartitionableGpus{
+
+	$pGpuObjs = Get-WmiObject -Class "Msvm_PartitionableGpu" -ComputerName $env:COMPUTERNAME -Namespace "ROOT\virtualization\v2"
+
+	foreach($pGpuObj in $pGpuObjs){
+
+		$deviceId  = convertInstanceIdtoDeviceId $pGpuObj.Name
+		$gpuPnpDevice = findPnpDevice $deviceId
+
+		if($gpuPnpDevice){
+
+			$thisGpu = [PSCustomObject]@{
+				friendlyName = $gpuPnpDevice.FriendlyName
+				deviceID     = $gpuPnpDevice.deviceID
+				instanceID   = $pGpuObj.Name
+				assignable   = $true
+			}
+		}
+		else{
+
+			$thisGpu = [PSCustomObject]@{
+				friendlyName = "Unknown GPU"
+				deviceID     = ""
+				instanceID   = $pGpuObj.Name
+				assignable   = $false
+			}
+
+		}
+
+		$pGpuList.Add($thisGpu) | out-null
+
+	}
+}
+
+# Assigns a GPU object to the VM.
 Function assignGpu{
 	
 	param($gpu)
@@ -308,20 +530,37 @@ Function assignGpu{
 
 			if($asgGpu){
 	
-				Set-VMGpuPartitionAdapter -VM $vmObj -adapterId $asgGpu.id -MinPartitionVRAM 80000000 -MaxPartitionVRAM 100000000 -OptimalPartitionVRAM 100000000 -MinPartitionEncode 80000000 -MaxPartitionEncode 100000000 -OptimalPartitionEncode 100000000 -MinPartitionDecode 80000000 -MaxPartitionDecode 100000000 -OptimalPartitionDecode 100000000 -MinPartitionCompute 80000000 -MaxPartitionCompute 100000000 -OptimalPartitionCompute 100000000
+				setAdapterConfig $gpu.friendlyName
+
+				Set-VMGpuPartitionAdapter `
+				-VM $vmObj `
+				-adapterId $asgGpu.id `
+				-MinPartitionVRAM $adapterConfig.MinPartitionVRAM `
+				-MaxPartitionVRAM $adapterConfig.MaxPartitionVRAM `
+				-OptimalPartitionVRAM $adapterConfig.OptimalPartitionVRAM `
+				-MinPartitionEncode $adapterConfig.MinPartitionEncode `
+				-MaxPartitionEncode $adapterConfig.MaxPartitionEncode `
+				-OptimalPartitionEncode $adapterConfig.OptimalPartitionEncode `
+				-MinPartitionDecode $adapterConfig.MinPartitionDecode `
+				-MaxPartitionDecode $adapterConfig.MaxPartitionDecode `
+				-OptimalPartitionDecode $adapterConfig.OptimalPartitionDecode `
+				-MinPartitionCompute $adapterConfig.MinPartitionCompute `
+				-MaxPartitionCompute $adapterConfig.MaxPartitionCompute `
+				-OptimalPartitionCompute $adapterConfig.OptimalPartitionCompute
 			}
 			else{
-				log "GPU Assigment: $($gpu.friendlyName) adapter settings could not configured." "warning"
+				log "$($gpu.friendlyName) adapter settings could not configured." "warning"
 			}
-			log "GPU Assigment: $($gpu.friendlyName) adapter assigned." "success"
+			log "$($gpu.friendlyName) adapter assigned." "success"
 		}
 	}
 	else{
-		log "GPU Assigment: Adapter $($gpu.friendlyName) doesn't have instance id. Couldn't assign." "error"
+		log "GPU Assignment: Adapter $($gpu.friendlyName) doesn't have instance id. Couldn't assign." "error"
 	}
 
 }
 
+# Assigns all GPU objects in the given GPU list to the VM.
 Function assignGpuList{
 
 	param($gpuList)
@@ -334,8 +573,7 @@ Function assignGpuList{
 
 }
 
-# --- Removement ---
-
+# Assigns all GPU objects in the "User-defined GPUs List".
 Function addGpuByInput{
 
 	foreach($udGpu in $udGpuList){
@@ -343,6 +581,7 @@ Function addGpuByInput{
 	}	
 }
 
+# Assigns all GPU objects in the "Partitionable GPUs List".
 Function addGpuAll{
 
 	foreach($pGpu in $pGpuList){
@@ -352,6 +591,8 @@ Function addGpuAll{
 		
 }
 
+# Assigns all GPU objects in the "User-defined GPUs List" if it's not empty
+# or first GPU object in the "Partitionable GPUs List".
 Function addGpuAuto{
 
 	if($udGpuList.count -eq 0 -and $pGpuList.count -gt 0){
@@ -364,6 +605,9 @@ Function addGpuAuto{
 	}
 }
 
+# --- Removement ---
+
+# Removes a assigned GPU from the VM based on the given GPU object.
 Function removeGpu{
 
 	param($gpu)
@@ -374,12 +618,13 @@ Function removeGpu{
 
 		if($?){
 	
-			log "GPU Removement: Adapter removed.`n$(showGpu $gpu $false)`n" "success"
+			log "Adapter removed.`n$(showGpu $gpu $false)`n" "success"
 		}
 	}
 
 }
 
+# Removes a assigned GPU from the VM based on the given adapter ID.
 Function removeGpuByAdapterId{
 
 	param($adapterID)
@@ -387,10 +632,11 @@ Function removeGpuByAdapterId{
 	Remove-VMGpuPartitionAdapter -VM $vmObj -AdapterId $adapterID
 
 	if($?){
-		log "GPU Removement: Adapter removed. (Adapter ID: $adapterID) " "success"
+		log "Adapter removed. (Adapter ID: $adapterID) " "success"
 	}
 }
 
+# Removes assigned GPUs from the VM based on the "User-defined GPUs List".
 Function removeGpuByInput{
 
 	$aGpuList=getAssignedGpus
@@ -452,94 +698,348 @@ Function removeGpuByInput{
 		$i++
 	}
 
-	log "GPU Removement: $total assigned GPUs removed.`n" "info"
+	log "$total assigned GPUs removed.`n" "info"
 }
 
+# Removes all assigned GPUs from the VM.
 Function removeAllGpus{
 
 	Get-VMGpuPartitionAdapter -VM $vmObj | Remove-VMGpuPartitionAdapter
 
-	log "GPU Removement: All assigned GPUs removed." "success"
+	log "All assigned GPUs removed." "success"
 
 }
 
-# --- Processes ---
+# --- Driver Operations ---
 
+# Sets packages directory for driver files.
+function setPackPath{
+
+	if($dest){
+		$script:packPath = $dest
+	}
+	else{
+		$script:packPath = "$($PSScriptRoot)\hostdrivers"
+	}
+
+	if (-Not (Test-Path -Path $script:packPath)) {
+		New-Item -ItemType Directory $script:packPath -ErrorAction SilentlyContinue | Out-Null
+	}
+
+	if (Test-Path -Path $script:packPath) {
+		log "Driver files will be copied to $script:packPath" 
+	}
+	else{
+		log "Unable to create or find $script:packPath. Please check parameters and destination directory permissions." "error"
+		exit
+	}
+
+}
+
+# Gathers driver files for the given GPU object from the host system.
+function gatherDriverFiles{
+
+	param($gpu)
+
+	if(-Not $packPath){
+
+		log "$packPath directory doesn't exist." "error"
+		return $null
+	}
+
+	if(-Not $gpu){
+
+		log "GPU variable doesn't exist." "error"
+		return $null
+	}
+	
+	$pnpDevice = Get-PnpDevice | Where-Object {$_.DeviceId -eq $gpu.deviceID} -ErrorAction SilentlyContinue
+
+	if ($null -eq $pnpDevice) {
+
+		log "Device not found: $($gpu.friendlyName)" "error"
+		return $null
+	}
+
+	$drvInfs     = Get-WmiObject Win32_PNPSignedDriver | where-object {$_.DeviceID -eq "$($pnpDevice.DeviceID)"} 
+	$drvProvider = $($drvInfs.DriverProviderName)
+	$drvDate     = $($drvInfs.DriverDate).Substring(0,8)
+	$driverName  = "$drvProvider`_$drvDate"
+	$driverPath  = "$packPath\$driverName"
+
+	log "Starting to copy $drvProvider driver files. Please wait." "info"
+
+	if( -Not $driverList.Contains($driverName)){
+
+		Remove-Item -Path $driverPath -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+		New-Item -ItemType Directory $driverPath -ErrorAction SilentlyContinue | Out-Null
+
+		if (Test-Path -Path $driverPath) {
+
+			# Adapted from Easy-GPU-PV
+			# https://github.com/jamesstringerparsec/Easy-GPU-PV/blob/main/Add-VMGpuPartitionAdapterFiles.psm1
+	
+			foreach ($drvInf in $drvInfs) {
+			
+				$drvFiles         = @()
+				$ModifiedDeviceID = $drvInf.DeviceID -replace "\\", "\\"
+				$Antecedent       = "\\" + $ENV:COMPUTERNAME + "\ROOT\cimv2:Win32_PNPSignedDriver.DeviceID=""$ModifiedDeviceID"""
+				$drvFiles += Get-WmiObject Win32_PNPSignedDriverCIMDataFile | Where-Object {$_.Antecedent -eq $Antecedent}
+		
+				$i=1;
+				$len=$drvFiles.count
+				$per=100/$len
+	
+				foreach ($drv in $drvFiles) {
+						
+					$path    = $drv.Dependent.Split("=")[1] -replace '\\\\', '\'
+					$path    = $path.Substring(1,$path.Length-2)
+					$infItem = Get-Item -Path $path
+		
+					$destFilePath   = $path.Replace("c:", "$driverPath")
+					$destFolderPath = $destFilePath.Substring(0, $destFilePath.LastIndexOf('\'))
+		
+					if ($destFolderPath -like "$driverPath\windows\system32\driverstore\*") {
+						$destFolderPath = $destFolderPath.Replace("driverstore","HostDriverStore")
+					}
+	
+					if (-Not (Test-Path -Path $destFolderPath)) {
+	
+						New-Item -ItemType Directory -Path $destFolderPath -Force | Out-Null
+					}
+		
+					Copy-Item $infItem -Destination $destFolderPath -Force
+					
+					$currPer=[int]($i*$per)
+	
+					Write-Progress -Activity "Copying Driver Files" -Status "$currPer% Copied:" -PercentComplete $currPer
+	
+					if($i -eq $len){
+
+						if($zip){
+
+							log "Starting to create $driverName.zip package. Please wait." "info"
+
+							Compress-Archive -Path "$driverPath\*" -DestinationPath "$packPath\$driverName.zip" -Force
+
+							if($?){
+								log "$driverPath.zip created." "success"
+								Remove-Item -Path $driverPath -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+							}
+						}
+						else{
+							log "Driver files for $($gpu.friendlyName) have been copied to $driverPath" "success"
+						}
+					}
+					$i++
+				}		
+			}
+		}
+		else{
+			log "Unable to create the $driverName driver package directory in $packPath" "error"
+		}
+
+		$driverList.Add($driverName) | Out-Null
+
+		#$txtFile = "$driverPath.txt"
+		#$txt     = "$driverName,$($gpu.friendlyName),$($gpu.deviceID),$($gpu.instanceID)"
+
+		#if(-Not (Test-Path -Path $txtFile)){
+		#	New-Item $txtFile | Out-Null
+		#}
+	
+		#$txt | Out-File -FilePath $txtFile
+	}
+	else{
+
+		log "$driverName driver package for $($gpu.friendlyName) have already been copied to $driverPath" "notice"
+
+		#$txtFile = "$driverPath.txt"
+		#$txt     = "$driverName,$($gpu.friendlyName),$($gpu.deviceID),$($gpu.instanceID)"
+
+		#if(-Not (Test-Path -Path $txtFile)){
+		#	New-Item $txtFile | Out-Null
+		#}
+	
+		#$txt | Out-File -Append -FilePath $txtFile
+
+	}
+
+	log "Don't forget to remove assigned GPUs before installing drivers to VM." "notice"
+}
+
+# Gathers driver files used by assigned GPUs from the host system.
+function gatherAssignedGpusDriverFiles{
+
+	setPackPath
+
+	$gpus = getAssignedGpus
+
+	if($gpus.count -eq 0){
+		log "Assigned GPU(s) not found. Please assign a GPU to VM or define GPU via -GPU parameter first (See readme.md)." "warning"
+		""
+		writeLog
+		Exit
+	}
+
+	foreach($gpu in $gpus){
+		gatherDriverFiles $gpu
+	}
+}
+
+# Gathers driver files based on the "User-defined GPUs List" from the host system.
+function gatherGpuDriverFilesByInput{
+
+	setPackPath
+
+	foreach($udGpu in $udGpuList){
+		gatherDriverFiles $udGpu
+	}
+}
+
+# -----------------
+# --- Processes ---
+# -----------------
+
+# Lists partitionable and assigned GPUs.
 Function process_ListGpus{
 
 	""
 	listGpus $pGpuList "Partitionable"
 
-	$assignedGpus=getAssignedGpus
-	listGpus $assignedGpus "Assigned"
+	$vmGot=vmGet
+
+	if($vmGot){
+		$assignedGpus=getAssignedGpus
+		listGpus $assignedGpus "Assigned"
+	}
 	""
 }
 
+# Lists partitionable GPUs.
 Function process_ListGpusPartitionable{
+
 	""
 	listGpus $pGpuList "Partitionable"
 	""
 }
 
+# Lists assigned GPUs.
 Function process_ListGpusAssigned{
 
 	""
+	vmCheck
 	$assignedGpus=getAssignedGpus
 	listGpus $assignedGpus "Assigned"
 	""
 }
 
-function process_Add {
+# Assigns GPU by parameter to the VM.
+Function process_Add {
 
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	addGpuByInput
 	""
+
+	writeLog
 }
 
-function process_AddAll {
+# Assigns all partitionable GPUs to the VM.
+Function process_AddAll {
 
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	addGpuAll
 	""
+
+	writeLog
 }
 
-function process_AddAuto {
+# Assigns user-defined GPUs if exist or first suitable partitionable GPU to the VM.
+Function process_AddAuto {
 
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	addGpuAuto
 	""
+
+	writeLog
 }
 
-function process_Remove {
+# Removes GPU(s) from the VM based on the -GPU parameter.
+Function process_Remove {
 
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	removeGpuByInput
 	""
+
+	writeLog
 }
 
-function process_RemoveAll {
+# Removes all assigned GPU(s) from the VM.
+Function process_RemoveAll {
+
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	removeAllGpus
 	""
+
+	writeLog
 }
 
-function process_Reset {
+# Removes assigned GPU(s) from the VM.
+# Then assigns user-defined GPUs if exist or first suitable partitionable GPU to the VM.
+Function process_Reset {
 
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
 	removeAllGpus
 	addGpuAuto
 	""
+	
+	writeLog
 }
 
+# Creates checkpoint.
 Function process_Checkpoint{
+
 	""
+	vmCheck
+	vmStatusCheck
+	disableAutoCheckpoints
+	
+	# Cache previusly assigned GPUs.
 	$prevGpus=getAssignedGpus
 	$prevCount=$prevGpus.count
 
+	# Remove all assigned GPUs.
 	removeAllGpus
 
+	# Create checkpoint
 	Checkpoint-VM -Name $vmName
 
+	if($?){
+		log "Checkpoint created." "success"
+	}
+	else{
+		log "Unable to create checkpoint." "error"
+	}
+
+	# Assign user-defined GPU(s) if exists, ignore previously assigned GPUs.
 	if($udGpuList.count -gt 0){
 
 		assignGpuList $udGpuList
@@ -549,6 +1049,7 @@ Function process_Checkpoint{
 
 		log "$currCount User-defined GPU adapter(s) assigned." "info"
 	}
+	# Reassign previously assigned GPUs.
 	else{
 
 		assignGpuList $prevGpus
@@ -568,8 +1069,38 @@ Function process_Checkpoint{
 	}
 	""
 
+	writeLog
 }
 
+# Retrieves user-defined GPUs drivers if exist or assigned GPUs automatically.
+Function process_GetDrivers{
+
+	""
+	if($gpusInput.count -gt 0){
+
+		if($udGpuList.count -gt 0){
+
+			gatherGpuDriverFilesByInput
+		}
+		else{
+	
+			log "No GPU(s) found. Please check -GPU arguments." "error"
+			""
+
+			exit
+		}
+
+	}
+	else{
+		vmCheck
+		gatherAssignedGpusDriverFiles
+	}
+	""
+
+	writeLog
+}
+
+# Script options
 Function process_Main{
 
 	switch ($do)
@@ -583,20 +1114,22 @@ Function process_Main{
 		"remove"                  {process_Remove; Break}
 		"remove-all"              {process_RemoveAll; Break}
 		"reset"                   {process_Reset; Break}
+		"get-drivers"             {process_GetDrivers; Break}
 		Default                   {process_Checkpoint}
 	}
 }
 
-# --- Run ---
+# -----------------
+# --- Run ---------
+# -----------------
 
 # Checks
-runAsAdministrator
-vmCheck
-vmStatusCheck
+checkAdministrator
+isVMCheck
 
 # Inits
 getPartitionableGpus
 getGpuByInput
 
-# Main
+## Main
 process_Main
