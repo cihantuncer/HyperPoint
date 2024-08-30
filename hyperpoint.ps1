@@ -338,7 +338,7 @@ Function disableAutoCheckpoints{
 Function getGpuByInput{
 
 	$i=0
-	
+
 	foreach($pGpu in $pGpuList){
 
 		foreach($gpuInput in $gpusInput){
@@ -350,9 +350,6 @@ Function getGpuByInput{
 				if( $deviceID -eq $($pGpu.deviceID) ){
 					$udGpuList.Add($pGpu) | out-null
 				}
-				else{
-					log "No GPU found with given device ID: $gpuInput" "warning"
-				}
 			}
 			elseif($gpuInput -match "instanceid:"){
 	
@@ -361,9 +358,6 @@ Function getGpuByInput{
 				if( $instanceID -eq $($pGpu.instanceID) ){
 
 					$udGpuList.Add($pGpu) | out-null
-				}
-				else{
-					log "No GPU found with given instance ID: $gpuInput" "warning"
 				}
 			}
 			elseif($gpuInput -match "order:"){
@@ -374,9 +368,6 @@ Function getGpuByInput{
 				
 					$udGpuList.Add($pGpu) | out-null
 				}
-				else{
-					log "No GPU found with given order: $gpuInput" "warning"
-				}
 			}
 			else{
 
@@ -385,13 +376,19 @@ Function getGpuByInput{
 				if( $pGpu.friendlyName -eq $gpuFName ){
 					$udGpuList.Add($pGpu) | out-null
 				}
-				else{
-					log "No GPU found with given name: $gpuInput" "warning"
-				}
 			}
 		}
+
 		$i++
 	}
+""
+	foreach($udGpu in $udGpuList){
+
+		log "$($udGpu.friendlyName) found in PGPUs list from input."
+	}
+
+
+	
 }
 
 # Gets the list of GPUs assigned to the VM.
