@@ -252,8 +252,6 @@ Function terminateProcess{
 
 	Stop-Process -Name $process.ProcessName -Force -ErrorAction SilentlyContinue
 
-	Start-Sleep -Seconds 3
-
 	if( $process.ProcessName -like "*sunshine*"){
 
 		Get-Service -DisplayName "*sunshine*" | Stop-Service -PassThru -Force
