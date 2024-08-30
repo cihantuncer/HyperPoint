@@ -401,7 +401,7 @@ Function copyFiles{
 			$driver.copied = $driver.copied + 1
 		}
 		catch{
-			log "$fullName could not be copied." "error"
+			log "$srcFile could not be copied." "error"
 		}
 	}
 }
