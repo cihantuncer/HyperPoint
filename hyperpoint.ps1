@@ -1,4 +1,4 @@
-# Hyperpoint v1.4.0
+# Hyperpoint v1.4.1
 # Gpu-Assigned Checkpoints for Hyper-V
 # https://github.com/cihantuncer/HyperPoint
 # (c) 2024, Cihan Tuncer - cihan@cihantuncer.com
@@ -381,14 +381,13 @@ Function getGpuByInput{
 
 		$i++
 	}
-""
+
+	""
+
 	foreach($udGpu in $udGpuList){
 
-		log "$($udGpu.friendlyName) found in PGPUs list from input."
-	}
-
-
-	
+		log "$($udGpu.friendlyName) found in the PGPUs list from input."
+	}	
 }
 
 # Gets the list of GPUs assigned to the VM.
@@ -761,7 +760,7 @@ function gatherDriverFiles{
 	$drvInfs     = Get-WmiObject Win32_PNPSignedDriver | where-object {$_.DeviceID -eq "$($pnpDevice.DeviceID)"} 
 	$drvProvider = $($drvInfs.DriverProviderName)
 	$drvDate     = $($drvInfs.DriverDate).Substring(0,8)
-	$driverName  = "$drvProvider`_$drvDate"
+	$driverName  = "$($drvProvider -replace ' ','_')`_$drvDate"
 	$driverPath  = "$packPath\$driverName"
 
 	log "Starting to copy $drvProvider driver files. Please wait." "info"
@@ -838,27 +837,10 @@ function gatherDriverFiles{
 
 		$driverList.Add($driverName) | Out-Null
 
-		#$txtFile = "$driverPath.txt"
-		#$txt     = "$driverName,$($gpu.friendlyName),$($gpu.deviceID),$($gpu.instanceID)"
-
-		#if(-Not (Test-Path -Path $txtFile)){
-		#	New-Item $txtFile | Out-Null
-		#}
-	
-		#$txt | Out-File -FilePath $txtFile
 	}
 	else{
 
-		log "$driverName driver package for $($gpu.friendlyName) have already been copied to $driverPath" "notice"
-
-		#$txtFile = "$driverPath.txt"
-		#$txt     = "$driverName,$($gpu.friendlyName),$($gpu.deviceID),$($gpu.instanceID)"
-
-		#if(-Not (Test-Path -Path $txtFile)){
-		#	New-Item $txtFile | Out-Null
-		#}
-	
-		#$txt | Out-File -Append -FilePath $txtFile
+		log "$driverName driver package has already been copied to $driverPath" "notice"
 
 	}
 

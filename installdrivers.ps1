@@ -1,4 +1,4 @@
-# Driver Installer for HyperPoint v1.0.0
+# Driver Installer v1.0.1 for HyperPoint 
 # https://github.com/cihantuncer/HyperPoint
 # (c) 2024, Cihan Tuncer - cihan@cihantuncer.com
 # This code is licensed under MIT license (see LICENSE.md for details)
@@ -14,8 +14,7 @@ param(
 
 $packPath     = $null
 $driverInput  = $drv
-$driverPacks  = [System.Collections.ArrayList]::new()
-$lockedDB     = @()
+$driverPacks  = @()
 $fileCount    = 0
 $copiedCount  = 0
 
@@ -158,6 +157,43 @@ Function isVmCheck{
 
 # --- Driver Operations ---
 
+
+Function cacheDriver{
+
+	param(
+		[string]$driverPath
+	)
+
+	$name     = [System.IO.Path]::GetFileNameWithoutExtension($driverPath)
+	$isZip    = $false
+	$tempPath = ""
+
+	if (Test-Path $driverPath -PathType Container) {
+		$fname    = $name
+		$tempPath = $driverPath
+		$isZip    = $false
+
+	} elseif ([System.IO.Path]::GetExtension($driverPath) -eq ".zip") {
+		$fname    = "$name.zip"
+		$tempPath = "$env:TEMP\$name"
+		$isZip=$true
+	}
+
+	$drvObj = [PSCustomObject]@{
+		path      = $driverPath
+		tempPath  = $tempPath
+		name      = $name
+		fname     = $fname
+		isZip     = $isZip
+		total     = 0
+		copied    = 0
+		lockedDB = @()
+		installed = $false
+	}
+
+	return $drvObj
+}
+
 # Checks if the existing driver file is locked by other process(es). 
 Function isLocked {
 
@@ -248,7 +284,7 @@ Function terminateProcess{
 
 	if(isLocked $process.FilePath){
 
-		log "$($process.FilePath) is still locked by $($process.ProcessName) (PID:$($process.ProcessID))."
+		log "$($process.FilePath) is still locked by $($process.ProcessName) (PID:$($process.ProcessID))." "warning"
 		return $false
 	}
 	else{
@@ -279,20 +315,17 @@ Function terminateProcesses {
 Function checkFiles{
 
 	param(
-		[string]$srcPath,
-		[string]$destPath
+		$driver
 	)
 
-	$lockedExists=$false
+	log "Starting to check $($driver.fname) driver files. Please wait."
 
-	log "Starting to check driver files. Please wait."
+	Get-ChildItem -Path $driver.tempPath -File -Recurse -ErrorAction SilentlyContinue -Force | ForEach-Object {
 
-	Get-ChildItem -Path $srcPath -File -Recurse -ErrorAction SilentlyContinue -Force | % {
-
-		$script:fileCount++
+		$driver.total = $driver.total + 1
 		
-		$destFile=$($_.FullName).replace($srcPath,$destPath)
-
+		$srcFile  = $_.FullName
+		$destFile = $srcFile.replace($driver.tempPath,"C:")
 
 		if(Test-Path $destFile -PathType Leaf){
 
@@ -300,11 +333,9 @@ Function checkFiles{
 
 				$processes = getFileLockingProcesses $destFile
 
-				$script:lockedDB += $processes
+				$driver.lockedDB += $processes
 
 				foreach($process in $processes){
-
-					$lockedExists=$true
 
 					log "$($process.FilePath) is locked by $($process.ProcessName) (PID:$($process.ProcessID))" "warning"
 
@@ -313,11 +344,11 @@ Function checkFiles{
 		}
 	}
 
-	if($lockedExists){
+	if($driver.lockedDB.count -gt 0){
 
 		if($force){
 
-			if(-Not (terminateProcesses $lockedDB)){
+			if(-Not (terminateProcesses $driver.lockedDB)){
 
 				$logStr ="Some driver files on the system are still locked and cannot be overwritten.`n"
 				$logStr+="Stop processes and services above, then re-run this script or manually copy locked files."
@@ -342,34 +373,32 @@ Function checkFiles{
 Function copyFiles{
 
 	param(
-		[string]$srcPath,
-		[string]$destPath
+		$driver
 	)
 
-	log "Starting to copy $($script:fileCount) driver files to system. Existing files will be overwritten. Please wait."
+	log "Starting to copy $($driver.total) of $($driver.fname) driver files to system. Existing files will be overwritten. Please wait."
 
 	$i=1;
-	$len=$script:fileCount
+	$len=$driver.total
 	$per=100/$len
 
-	Get-ChildItem -Path $srcPath -File -Recurse -ErrorAction SilentlyContinue -Force | ForEach-Object {
+	Get-ChildItem -Path $driver.tempPath -File -Recurse -ErrorAction SilentlyContinue -Force | ForEach-Object {
 
 		$currPer=[int]($i*$per)
-		Write-Progress -Activity "Installing Driver Files" -Status "$currPer% Copied:" -PercentComplete $currPer
+		Write-Progress -Activity "Installing $($driver.name) Driver Files" -Status "$currPer% Copied:" -PercentComplete $currPer
 		$i++
 
-		$fullName=$_.FullName
-		$destFile=$fullName.replace($srcPath,$destPath)
-
-		$destDir = Split-Path -Path $destFile -Parent
+		$srcFile  = $_.FullName
+		$destFile = $srcFile.replace($driver.tempPath,"C:")
+		$destDir  = Split-Path -Path $destFile -Parent
 
 		if (-not (Test-Path -Path $destDir)) {
 		    New-Item -Path $destDir -ItemType Directory -Force | Out-Null
 		}
 
 		try{
-			Copy-Item -Path $fullName -Destination $destFile -Force -Recurse
-			$script:copiedCount++
+			Copy-Item -Path $srcFile -Destination $destFile -Force -Recurse
+			$driver.copied = $driver.copied + 1
 		}
 		catch{
 			log "$fullName could not be copied." "error"
@@ -378,123 +407,109 @@ Function copyFiles{
 }
 
 # Copies driver package folder contents to the system.
-Function copyFromFolder{
+Function installFromFolder{
 
 	param(
-		[string]$driverPath
+		$driver
 	)
 
-	$tempPath=$driverPath
-	$destPath="C:"
+	checkFiles $driver
+	copyFiles  $driver
 
-	checkFiles $tempPath $destPath
-	copyFiles  $tempPath $destPath
-
-	 return $true
+	$driver.installed=$true
 }
 
 # Copies driver zip package contents to the system.
-Function copyFromZip{
+Function installFromZip{
 
 	param(
-		[string]$driverPath
+		$driver
 	)
 
-	if(Test-Path -Path $driverPath -PathType leaf){
+	if(Test-Path -Path $driver.path -PathType leaf){
 
-		# zip package
-
-		$drvName=$($(Split-Path $driverPath -leaf)).Replace(".zip", "")
-		$tempPath="$env:TEMP\$drvName"
-		$destPath="C:"
-
-		if (-not (Test-Path -Path $tempPath)) {
+		if (-not (Test-Path -Path $driver.tempPath)) {
 			
-		    New-Item -Path $tempPath -ItemType Directory -Force  | Out-Null
+		    New-Item -Path $driver.tempPath -ItemType Directory -Force  | Out-Null
 		}
 
-		log "Starting to extract driver files to temp directory. Please wait."
+		log "Starting to extract driver files to temporary directory. Please wait."
 
 		Start-Sleep 2
 
-		Expand-Archive -Path $driverPath -DestinationPath $tempPath -Force
+		Expand-Archive -Path $driver.path -DestinationPath $driver.tempPath -Force
 
 		if($?){
 
 			log "Extraction completed."
 
-			if(Test-Path -Path $tempPath){
+			if(Test-Path -Path $driver.tempPath){
 
-				checkFiles $tempPath $destPath
-				 copyFiles $tempPath $destPath
+				checkFiles $driver
+				 copyFiles $driver
 
-				 return $true
+				 $driver.installed=$true
 			}
 			else{
-
-				log "Unable to access temp directory: $tempPath" "error"
+				log "Unable to access temporary directory: $($driver.tempPath)" "error"
 			}
 		}
 		else{
-			log "Unable to extract driver files to temp directory: $tempPath" "error"
+			log "Unable to extract driver files to temporary directory: $($driver.tempPath)" "error"
 		}
 	}
 }
 
 # Driver installation.
-Function copyDriverFiles{
+Function installDriverFiles{
 
-	param($driverPath)
+	param($driver)
 
-	$driverName = "$($(Split-Path $driverPath -leaf).replace('.zip',''))"
-	$fin        = $false
-	$driverLog  = $null
+	#$driverLog  = $null
 	
+	""
+	log "Starting to install $($driver.fname)"
 
-	if(-Not $driverPath){
+	if(-Not $driver.path){
 
-		log "Driver package value is empty." "error"
+		log "Driver package path value is empty." "error"
 		return $null
 	}
 
-	if(Test-Path -Path $driverPath -PathType leaf){
+	if($driver.isZip){
 
 		# zip package
-		$fin = copyFromZip $driverPath
+		installFromZip $driver
+
 		#$driverLog="$packPath\$($(Split-Path $driverPath -leaf).replace('.zip','.txt'))"
-		
 	}
-	elseif(Test-Path -Path $driverPath){
+	else{
 
 		# folder package
-		$fin = copyFromFolder $driverPath
+		installFromFolder $driver
+
 		#$driverLog="$driverPath.txt"
 	}
 
-	if($fin){
+	if($driver.installed){
 
 		#drvLog $driverLog
 
-		$diff=$script:fileCount - $script:copiedCount
+		$diff=$driver.total - $driver.copied
 
 		if($diff -gt 0){
 
-			$logStr  = "$driverName installation completed but $diff driver file(s) cannot be copied."
+			$logStr  = "$($driver.fname) installation completed but $diff driver file(s) cannot be copied."
 			$logStr += "Stop processes and services above, then re-run this script or manually copy locked files."
 
 			log $logStr "warning"
 		}
 		else{
-			log "$driverName installation completed successfully. $($script:copiedCount) driver files copied from $driverPath to Windows." "success"
-		}
-
-		
-		log "Don't forget to (re)assign GPU(s) to VM." "notice"
-
-		
+			log "$($driver.fname) installation completed successfully. $($driver.copied) driver files copied from $($driver.fname) to Windows." "success"
+		}	
 	}
 	else{
-		log "Errors occured while installing driver files from $driverPath to C:\windows." "error"
+		log "Errors occured while installing $($driver.fname) driver files from $($driver.path) to Windows." "error"
 	}
 }
 
@@ -519,30 +534,33 @@ Function drvLog{
 # Determines drivers in the packages directory.
 Function getDriverPackagesAuto{
 
-	$paths = Get-ChildItem -Path "$packPath\*" -Directory -Force -ErrorAction SilentlyContinue
-	$zips  = Get-ChildItem -Path "$packPath\*" -include *.zip -Force -ErrorAction SilentlyContinue
+	$folderPacks = Get-ChildItem -Path "$packPath\*" -Directory -Force -ErrorAction SilentlyContinue
+	$zipPacks    = Get-ChildItem -Path "$packPath\*" -include *.zip -Force -ErrorAction SilentlyContinue
 
 	$count=0
 
-	if($zips -AND ($zips.count -gt 0)){
+	if($zipPacks -AND ($zipPacks.count -gt 0)){
 
-		foreach($zip in $zips){
+		foreach($zipPack in $zipPacks){
 
 			$count++;
-			$driverPacks.Add("$zip") | Out-Null
-			log "`"$(Split-Path $zip -leaf)`" package found in $packPath." "info"
+
+			$driver = cacheDriver $zipPack
+			$script:driverPacks += $driver
+
+			log "$($driver.fname) package found in $packPath." "info"
 		}
 	}
 
-	if($paths -AND ($paths.count -gt 0)){
+	if($folderPacks -AND ($folderPacks.count -gt 0)){
 
-		:findPaths foreach($path in $paths){
+		foreach($folderPack in $folderPacks){
 
 			$foundZip=$false
 
 			foreach($driver in $driverPacks){
 
-				if( $driver -eq "$path.zip" ){
+				if( $driver.path -eq "$folderPack.zip" ){
 
 					$foundZip=$true
 					break
@@ -550,13 +568,17 @@ Function getDriverPackagesAuto{
 			}
 
 			if($foundZip){
-				log "`"$(Split-Path $path -leaf)`" package already exists as zip. Folder package skipped." "notice"
+				log "`"$(Split-Path $folderPack -leaf)`" package already exists as zip. Folder package skipped." "notice"
 			}
 			else{
 
 				$count++;
-				$driverPacks.Add("$path") | Out-Null
-				log "`"$(Split-Path $path -leaf)`" package folder found in $packPath." "info"
+
+				$driver = cacheDriver $folderPack
+
+				$script:driverPacks += $driver
+
+				log "$($driver.fname) package folder found in $packPath." "info"
 			}		
 		}
 	}
@@ -571,21 +593,23 @@ Function getDriverPackagesByInput{
 
 	foreach($driverName in $driverInput){
 
-		$path="$packPath\$driverName"
+		$pack="$packPath\$driverName"
 
-		if (Test-Path -Path $path -PathType Leaf) {
+		if (Test-Path -Path $pack -PathType Leaf) {
 
-			$driverPacks.Add("$path") | Out-Null
-			log "`"$driverName`" package found in $packPath." "info"
+			$script:driverPacks += cacheDriver $pack
+
+			log "$driverName package found in $packPath." "info"
 
 		}
-		elseif(Test-Path -Path $path) {
+		elseif(Test-Path -Path $pack) {
 
-			$driverPacks.Add("$path") | Out-Null
-			log "`"$driverName`" package folder found in $packPath." "info"
+			$script:driverPacks += cacheDriver $pack
+
+			log "$driverName package folder found in $packPath." "info"
 
 		} else {
-			log "No `"$driverName`" package found to install." "error"
+			log "No $driverName package found to install." "error"
 		}
 	}
 }
@@ -603,7 +627,9 @@ Function process_installDrivers{
 
 		# Install driver.
 		if( (Test-Path -Path $drvsrc -PathType Leaf) -or (Test-Path -Path $drvsrc) ){	
-			copyDriverFiles $drvsrc
+
+			$driver = cacheDriver $drvsrc
+			installDriverFiles $driver
 		}
 		else{
 			log "Unable to find driver directory. Please check -DRVSRC parameter." "error"
@@ -655,11 +681,11 @@ Function process_installDrivers{
 		}else{
 			getDriverPackagesByInput
 		}
-		
+
 		# Install drivers.
-		foreach($driverPack in $driverPacks){
+		foreach($driver in $driverPacks){
 	
-			copyDriverFiles $driverPack
+			installDriverFiles $driver
 		}
 
 	}
@@ -673,7 +699,7 @@ Function process_installDrivers{
 
 # Checks
 checkAdministrator
-isVmCheck
+#isVmCheck
 
 # Main
 process_InstallDrivers
