@@ -409,7 +409,11 @@ Function copyFromZip{
 		$destPath="C:"
 
 		if (-not (Test-Path -Path $tempPath)) {
+<<<<<<< HEAD
 		    New-Item -Path $tempPath -ItemType Directory -Force  | Out-Null
+=======
+		    New-Item -Path $tempPath -ItemType Directory -Force
+>>>>>>> 578b8e6652ef189870ae3fd7f456921299cde2a5
 		}
 
 		log "Starting to extract driver files to temp directory. Please wait."

@@ -2,8 +2,7 @@
 
 Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint removes assigned GPU adapters, creates checkpoint then reassigns GPU adapters. So, you can create checkpoints and continue to use your GPU(s) in your VMs.
 
-
-
+<br><br>
 
 ## With HyperPoint, You Can
 1) Create checkpoints for GPU-assigned VMs.
@@ -13,8 +12,9 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 5) List available GPU adapter(s) and view GPU details: name, device ID, instance ID, device order.
 6) List assigned GPU adapter(s) and view GPU details: name, device ID, instance ID, device order.
 
-
-
+<br><br>
+**For detailed information see [Usage Examples](https://github.com/cihantuncer/HyperPoint/wiki/Usage-Examples) on Wiki**
+<br><br>
 
 ## Cautions
 1) **Do not attempt** to remove/add GPUs or create checkpoints while your target VM is running. This will definitely break snapshots, the VM, and possibly your heart. (The checkpoint, add, remove processes already won't execute while the target VM is running, but keep this in mind.)
@@ -22,13 +22,12 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 3) The automatic checkpoint option won't work for GPU-assigned VMs and will result in an error. The script also disables this option.
 4) HyperPoint has not been tested in all possible scenarios and environments. Make sure to **backup your VM** before using the script. **Use it at your own risk**.
 
-**Note: Do not forget set the execution policy to "RemoteSigned" before executing the script.**
-`Set-ExecutionPolicy RemoteSigned`
- 
- 
+<br>
 
+Note: Do not forget set the execution policy to "RemoteSigned" before executing the script via `Set-ExecutionPolicy RemoteSigned`
 
-  
+ <br><br>
+   
 ## Parameters
 
 | Param   | Argument                       | Description                                                     |
@@ -63,6 +62,8 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 | -DRVSRC | "Path\To\DriverPackage(.zip)"  | Direct path to driver package folder or zip(9).                 |
 | -FORCE  |                                | Force install the driver(10).                                   |
 
+<br>
+
 > **(1):** If -GPU parameter is not defined; first suitable GPU will be selected automatically.
 
 > **(2):** If there are multiple GPUs with the same name in the PGPU list, all of them will be grabbed.
@@ -83,8 +84,5 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 
 > **(10):** The -FORCE parameter tries to unlock files locked by other processes during installation.
 
-## For detailed information see [Usage Examples](https://github.com/cihantuncer/HyperPoint/wiki/Usage-Examples) on Wiki
+<br><br>
 
-## Adapter Config File in The Script Directory
-
-Default VRAM, Encode, Decode and Compute settings are hardcoded in the script for all GPU assignments. If you want to change these settings when assigning GPU(s), you can edit (or create if it doesn't exist) the adapter.config file in the script directory. This will apply to all GPU assignments. If you want to apply settings for only a specific GPU, create a config file named after the GPU's friendly name in the script directory (e.g., Nvidia Geforce RTX 4060.config, Nvidia-Geforce-RTX-4060.config, Nvidia_Geforce_RTX_4060.config, NvidiaGeforceRTX4060.config). The contents of the configuration file should be `variable = value` (e.g., `MinPartitionVRAM = 80000000`) line by line.
