@@ -21,8 +21,8 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 4) HyperPoint has not been tested in all possible scenarios and environments. Make sure to **backup your VM** before using the script. **Use it at your own risk**.
 
 <br>
-**Note: Do not forget set the execution policy to "RemoteSigned" before executing the script.**
-`Set-ExecutionPolicy RemoteSigned`
+
+Note: Do not forget set the execution policy to "RemoteSigned" before executing the script via `Set-ExecutionPolicy RemoteSigned`
 
  <br><br>
    
