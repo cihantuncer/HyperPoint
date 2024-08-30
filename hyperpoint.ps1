@@ -7,7 +7,7 @@
 param(
 	[string]$vm,         # Virtual machine name
 	[string]$do,         # Option name
-    [string[]] $gpu=@(), # GPU query array
+        [string[]] $gpu=@(), # GPU query array
 	[string]$dest,       # Driver installation destination path
 	[switch]$zip,        # Driver installation compress option
 	[switch]$s           # Silent mode
