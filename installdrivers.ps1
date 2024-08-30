@@ -408,6 +408,10 @@ Function copyFromZip{
 		$tempPath="$env:TEMP\$drvName"
 		$destPath="C:"
 
+		if (-not (Test-Path -Path $tempPath)) {
+		    New-Item -Path $tempPath -ItemType Directory -Force
+		}
+
 		log "Starting to extract driver files to temp directory. Please wait."
 
 		Start-Sleep 2
