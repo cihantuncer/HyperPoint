@@ -13,6 +13,8 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 6) List assigned GPU adapter(s) and view GPU details: name, device ID, instance ID, device order.
 
 <br><br>
+**For detailed information see [Usage Examples](https://github.com/cihantuncer/HyperPoint/wiki/Usage-Examples) on Wiki**
+<br><br>
 
 ## Cautions
 1) **Do not attempt** to remove/add GPUs or create checkpoints while your target VM is running. This will definitely break snapshots, the VM, and possibly your heart. (The checkpoint, add, remove processes already won't execute while the target VM is running, but keep this in mind.)
@@ -83,6 +85,4 @@ Note: Do not forget set the execution policy to "RemoteSigned" before executing 
 > **(10):** The -FORCE parameter tries to unlock files locked by other processes during installation.
 
 <br><br>
-
-**For detailed information see [Usage Examples](https://github.com/cihantuncer/HyperPoint/wiki/Usage-Examples) on Wiki**
 
