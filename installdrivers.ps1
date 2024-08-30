@@ -364,7 +364,7 @@ Function copyFiles{
 		$destDir = Split-Path -Path $destFile -Parent
 
 		if (-not (Test-Path -Path $destDir)) {
-		    New-Item -Path $destDir -ItemType Directory -Force
+		    New-Item -Path $destDir -ItemType Directory -Force | Out-Null
 		}
 
 		try{
@@ -409,7 +409,7 @@ Function copyFromZip{
 		$destPath="C:"
 
 		if (-not (Test-Path -Path $tempPath)) {
-		    New-Item -Path $tempPath -ItemType Directory -Force
+		    New-Item -Path $tempPath -ItemType Directory -Force  | Out-Null
 		}
 
 		log "Starting to extract driver files to temp directory. Please wait."
