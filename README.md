@@ -17,9 +17,13 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 <br><br>
 
 ## Cautions
-1) **Do not attempt** to remove/add GPUs or create checkpoints while your target VM is running. This will definitely break snapshots, the VM, and possibly your heart. (The checkpoint, add, remove processes already won't execute while the target VM is running, but keep this in mind.)
-2) **Do not modify** the VM disk contents from outside, such as by attaching the VHDX file to the host (e.g., if you want to update GPU drivers in the VM). This will also break checkpoints (You will need to remove the VM, create a new one, and attach the old VM disk). It is recommended to modify VM disk contents from within the guest OS. You can easily install/update drivers via HyperPoint (See Usage Examples).
-3) The automatic checkpoint option won't work for GPU-assigned VMs and will result in an error. The script also disables this option.
+
+1) **Do not attempt** to remove/add GPUs or create checkpoints while your target VM is running. This will definitely break snapshots, the VM, and possibly your heart. (The script's checkpoint, add, remove processes already won't execute while the target VM is running, but keep this in mind.)<br>
+
+2) **Do not modify** the VM disk contents from outside, such as by attaching the VHDX file to the host (e.g., if you want to update GPU drivers in the VM). This will also break checkpoints (You will need to remove the VM, create a new one, and attach the old VM disk). It is recommended to modify VM disk contents from within the guest OS. **You can easily install/update drivers via HyperPoint (See Usage Examples).**<br>
+
+3) The automatic checkpoint option won't work for GPU-assigned VMs and will result in an error. The script also disables this option.<br>
+
 4) HyperPoint has not been tested in all possible scenarios and environments. Make sure to **backup your VM** before using the script. **Use it at your own risk**.
 
 <br>
