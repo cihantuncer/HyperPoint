@@ -688,6 +688,35 @@ Function process_installDrivers{
 
 	}
 
+	$total=0
+	$installed=0
+	
+	foreach($driver in $driverPacks){
+	
+		$total = $total + 1
+		
+		if($driver.installed){
+		
+			$installed = $installed + 1
+			log "$($driver.fname) installed."
+		
+		}
+		else{
+			log "$($driver.fname) could not be installed."
+		}
+	
+	}
+	
+	if($installed){
+		
+		log "$installed of $total driver packages installed."
+		log "Installation completed. Don't forget to (re)assign GPU(s) to the VM." "notice"
+
+	}else{
+	
+		log "No driver package installed." "notice"
+	}
+
 	writeLog
 }
 
@@ -697,7 +726,7 @@ Function process_installDrivers{
 
 # Checks
 checkAdministrator
-#isVmCheck
+isVmCheck
 
 # Main
 process_InstallDrivers
