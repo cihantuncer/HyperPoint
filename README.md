@@ -1,3 +1,5 @@
+
+
 # HyperPoint - Easy Checkpoints for GPU-Assigned Hyper-V Virtual Machines
 
 Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint removes assigned GPU adapters, creates checkpoint then reassigns GPU adapters. So, you can create checkpoints and continue to use your GPU(s) in your VMs.
@@ -28,7 +30,7 @@ Hyper-V does not allow checkpoints on GPU-assigned virtual machines. HyperPoint 
 
 <br>
 
-Note: Do not forget set the execution policy to "RemoteSigned" before executing the script via `Set-ExecutionPolicy RemoteSigned`
+Note: Do not forget to set the execution policy to "RemoteSigned" before executing the script via `Set-ExecutionPolicy RemoteSigned`
 
  <br><br>
    
@@ -89,4 +91,3 @@ Note: Do not forget set the execution policy to "RemoteSigned" before executing 
 > **(10):** The -FORCE parameter tries to unlock files locked by other processes during installation.
 
 <br><br>
-
